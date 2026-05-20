@@ -72,6 +72,14 @@ export const departments: CampusDepartment[] = [
     sourceHref: "https://bmsit.ac.in/electronics-and-communication-engineering",
   },
   {
+    slug: "ete",
+    code: "ETE",
+    name: "Electronics and Telecommunication Engineering",
+    kind: "UG",
+    sourceLabel: "BMSIT Autonomous Syllabus",
+    sourceHref: "https://bmsit.ac.in/autonomous.php",
+  },
+  {
     slug: "eee",
     code: "EEE",
     name: "Electrical and Electronics Engineering",
