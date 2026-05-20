@@ -1,4 +1,5 @@
 import type { LearningBlock, TopicNode } from "@/types/learning";
+import { generatedCourses } from "./generated-courses";
 
 export type CampusDepartment = {
   slug: string;
@@ -428,6 +429,7 @@ export const courses: CampusCourse[] = [
       },
     ],
   },
+  ...generatedCourses,
 ];
 
 export function getDepartment(slug: string) {
