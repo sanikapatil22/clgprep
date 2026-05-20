@@ -90,3 +90,102 @@ a {
   color: #f8fafc;
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
 }
+
+.concept-visual-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.72);
+  padding: 18px;
+}
+
+.concept-visual-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.18), transparent);
+  animation: concept-scan 3.2s ease-in-out infinite;
+}
+
+.concept-visual-source {
+  min-height: 220px;
+  border-color: rgba(56, 189, 248, 0.34);
+  animation: concept-pop 3.2s ease-in-out infinite;
+}
+
+.concept-visual-branch {
+  border-color: rgba(251, 191, 36, 0.28);
+  animation: concept-branch 3.2s ease-in-out infinite;
+}
+
+.concept-visual-result {
+  border-color: rgba(52, 211, 153, 0.32);
+  animation: concept-result 3.2s ease-in-out infinite;
+}
+
+.concept-flow-line {
+  width: 70px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.concept-flow-line::after {
+  display: block;
+  width: 34px;
+  height: 2px;
+  border-radius: 999px;
+  background: #38bdf8;
+  content: "";
+  animation: concept-flow 1.5s ease-in-out infinite;
+}
+
+@keyframes concept-scan {
+  0%, 42% {
+    transform: translateX(-110%);
+  }
+  72%, 100% {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes concept-pop {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(56, 189, 248, 0);
+    transform: translateY(0);
+  }
+  45% {
+    box-shadow: 0 18px 42px rgba(56, 189, 248, 0.12);
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes concept-branch {
+  0%, 18%, 100% {
+    transform: translateX(0);
+  }
+  46% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes concept-result {
+  0%, 34%, 100% {
+    transform: scale(1);
+  }
+  62% {
+    transform: scale(1.025);
+  }
+}
+
+@keyframes concept-flow {
+  from {
+    transform: translateX(-40px);
+  }
+  to {
+    transform: translateX(78px);
+  }
+}

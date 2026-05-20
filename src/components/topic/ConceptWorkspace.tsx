@@ -42,6 +42,11 @@ type WorkspaceCopy = {
   needsEditor: boolean;
   language: "sql" | "javascript";
   animationFrames: string[];
+  visual: {
+    source: string;
+    branches: string[];
+    results: string[];
+  };
 };
 
 function includesAny(value: string, terms: string[]) {
@@ -150,6 +155,11 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
       needsEditor: true,
       language: "sql",
       animationFrames: ["Find repeating course values", "Split them into Enrollment rows", "Validate atomic columns"],
+      visual: {
+        source: "Unnormalized table",
+        branches: ["Student details", "Repeated courses"],
+        results: ["Student table", "Enrollment table"],
+      },
     };
   }
 
@@ -186,7 +196,68 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
       "Break it into definition, parts, and behavior",
       "Use one example to prove you understood it",
     ],
+    visual: includesAny(topic.title, ["class", "object"])
+      ? {
+          source: "Class blueprint",
+          branches: ["Properties: USN, name, CGPA", "Methods: display, update, calculate"],
+          results: ["studentOne object", "studentTwo object"],
+        }
+      : {
+          source: topic.title,
+          branches: ["Definition", "Parts", "Behavior"],
+          results: ["Worked example", "Practice check"],
+        },
   };
+}
+
+function VisualExplanation({ copy }: { copy: WorkspaceCopy }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-black p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-300">Visual explanation</p>
+          <h3 className="mt-2 text-2xl font-semibold text-white">{copy.title}</h3>
+        </div>
+        <span className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-200">
+          Animated flow
+        </span>
+      </div>
+
+      <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_auto_1.1fr_auto_1fr]">
+        <div className="concept-visual-card concept-visual-source">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Start</p>
+          <p className="mt-3 text-xl font-semibold text-white">{copy.visual.source}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-400">{copy.plainMeaning}</p>
+        </div>
+
+        <div className="hidden items-center xl:flex">
+          <div className="concept-flow-line" />
+        </div>
+
+        <div className="grid gap-3">
+          {copy.visual.branches.map((branch, index) => (
+            <div key={branch} className="concept-visual-card concept-visual-branch" style={{ animationDelay: `${index * 180}ms` }}>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Breakdown {index + 1}</p>
+              <p className="mt-2 font-semibold text-slate-100">{branch}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden items-center xl:flex">
+          <div className="concept-flow-line" />
+        </div>
+
+        <div className="grid gap-3">
+          {copy.visual.results.map((result, index) => (
+            <div key={result} className="concept-visual-card concept-visual-result" style={{ animationDelay: `${360 + index * 180}ms` }}>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Result {index + 1}</p>
+              <p className="mt-2 font-semibold text-white">{result}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProps) {
@@ -524,7 +595,9 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
           </div>
           
           <div className="flex flex-1 flex-col overflow-y-auto bg-[#111] p-6">
-            <div className="grid gap-4">
+            <VisualExplanation copy={copy} />
+
+            <div className="mt-6 grid gap-4">
               {copy.animationFrames.map((frame, index) => (
                 <div
                   key={frame}
