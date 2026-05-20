@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BlockType {
+  TEXT
+  DIAGRAM
+  QUIZ
+  ANIMATION
+  FLASHCARD
+  PYQ
+  STEP
+  CODE
+}
+
+enum ResourceType {
+  NOTES
+  PYQ
+  CHEATSHEET
+  VIDEO
+  WEBSITE
+  DRIVE_FILE
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  college      String?
+  semester     Int        @default(1)
+  xp           Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  progress     Progress[]
+  streaks      Streak[]
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  code        String
+  semester    Int
+  description String
+  xpReward    Int      @default(1000)
+  createdAt   DateTime @default(now())
+  modules     Module[]
+}
+
+model Module {
+  id        String   @id @default(cuid())
+  courseId  String
+  title     String
+  position  Int
+  xpReward  Int      @default(250)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+
+  @@unique([courseId, position])
+}
+
+model Topic {
+  id             String       @id @default(cuid())
+  moduleId       String
+  slug           String       @unique
+  title          String
+  summary        String
+  position       Int
+  xpReward       Int          @default(80)
+  unlockAfterId  String?
+  module         Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  blocks         TopicBlock[]
+  resources      Resource[]
+  progress       Progress[]
+  quizzes        Quiz[]
+  unlockAfter    Topic?       @relation("TopicUnlock", fields: [unlockAfterId], references: [id])
+  unlocks        Topic[]      @relation("TopicUnlock")
+
+  @@unique([moduleId, position])
+}
+
+model TopicBlock {
+  id          String    @id @default(cuid())
+  topicId     String
+  type        BlockType
+  position    Int
+  contentJson Json
+  topic       Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, position])
+}
+
+model Resource {
+  id        String       @id @default(cuid())
+  topicId   String
+  type      ResourceType
+  title     String
+  url       String
+  metadata  Json?
+  topic     Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+}
+
+model Progress {
+  id             String   @id @default(cuid())
+  userId         String
+  topicId        String
+  completed      Boolean  @default(false)
+  xpEarned       Int      @default(0)
+  quizScore      Int?
+  lastBlockIndex Int      @default(0)
+  completedAt    DateTime?
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic          Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  topicId     String
+  question    String
+  options     Json
+  answer      String
+  explanation String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+}
+
+model Streak {
+  id        String   @id @default(cuid())
+  userId    String
+  day       DateTime
+  xpEarned  Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+}
