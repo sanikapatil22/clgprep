@@ -260,6 +260,59 @@ function VisualExplanation({ copy }: { copy: WorkspaceCopy }) {
   );
 }
 
+function parseStructuredOutput(line: string) {
+  try {
+    const parsed = JSON.parse(line);
+    return Array.isArray(parsed) || (parsed && typeof parsed === "object") ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function OutputRenderer({ output, compact = false }: { output: string[]; compact?: boolean }) {
+  if (output.length === 0) {
+    return <p className="text-slate-500">Click "Run" to execute your practice check.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {output.map((line, lineIndex) => {
+        const parsed = parseStructuredOutput(line);
+
+        if (Array.isArray(parsed)) {
+          return (
+            <div key={`${line}-${lineIndex}`} className="space-y-2">
+              {parsed.map((item, itemIndex) => (
+                <div key={itemIndex} className="rounded-md border border-slate-800 bg-black p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">
+                    Step {typeof item?.step === "number" ? item.step : itemIndex + 1}
+                  </p>
+                  <p className="mt-2 font-semibold text-white">{String(item?.name ?? "Practice checkpoint")}</p>
+                  <p className="mt-2 leading-6 text-slate-300">{String(item?.action ?? JSON.stringify(item, null, 2))}</p>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        if (parsed && typeof parsed === "object") {
+          return (
+            <pre key={`${line}-${lineIndex}`} className="whitespace-pre-wrap rounded-md border border-slate-800 bg-black p-4 font-mono text-sm leading-6 text-slate-200">
+              {JSON.stringify(parsed, null, 2)}
+            </pre>
+          );
+        }
+
+        return (
+          <div key={`${line}-${lineIndex}`} className={`rounded-md border border-slate-800 bg-black ${compact ? "p-3 text-xs" : "p-4 text-sm"} leading-6 text-slate-200`}>
+            {line}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProps) {
   const [tab, setTab] = useState<"description" | "explanation" | "output">("description");
   const [rightTab, setRightTab] = useState<"walkthrough" | "visual" | "practice">("walkthrough");
@@ -488,11 +541,13 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
 
                 {outputTab === "run" ? (
                   <div className="rounded-md border border-slate-800 bg-black p-4">
-                    {output.length === 0 ? (
-                      <p className="text-slate-500">Click "Run" to execute your code.</p>
-                    ) : (
+                    {course.slug === "dbms" ? (
+                      output.length === 0 ? (
+                        <p className="text-slate-500">Click "Run" to execute your code.</p>
+                      ) : (
                       <pre className="whitespace-pre-wrap font-mono text-sm leading-6 text-slate-200">{output.join("\n")}</pre>
-                    )}
+                      )
+                    ) : <OutputRenderer output={output} />}
                   </div>
                 ) : null}
 
@@ -730,9 +785,11 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                   </div>
 
                   {outputTab === "run" && (
-                    <pre className="whitespace-pre-wrap rounded-md border border-slate-800 bg-black p-3 font-mono text-xs leading-5 text-slate-200">
-                      {output.join("\n")}
-                    </pre>
+                    course.slug === "dbms" ? (
+                      <pre className="whitespace-pre-wrap rounded-md border border-slate-800 bg-black p-3 font-mono text-xs leading-5 text-slate-200">
+                        {output.join("\n")}
+                      </pre>
+                    ) : <OutputRenderer output={output} compact />
                   )}
 
                   {outputTab === "problems" && (
