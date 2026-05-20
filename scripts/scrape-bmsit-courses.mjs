@@ -98,7 +98,9 @@ async function fetchBuffer(url) {
 
 async function main() {
   const html = await (await fetch(SOURCE_URL)).text();
-  const selectedLinks = latestPerDepartmentSemester(extractSyllabusLinks(html));
+  const allLinks = latestPerDepartmentSemester(extractSyllabusLinks(html));
+  // Filter to only semesters 1, 2, 5, 6, 7, 8 (skip 3 and 4)
+  const selectedLinks = allLinks.filter((link) => [1, 2, 5, 6, 7, 8].includes(link.semester));
   const catalog = {
     source: SOURCE_URL,
     scrapedAt: new Date().toISOString(),
