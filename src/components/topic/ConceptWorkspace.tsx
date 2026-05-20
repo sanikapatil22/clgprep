@@ -262,6 +262,7 @@ function VisualExplanation({ copy }: { copy: WorkspaceCopy }) {
 
 export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProps) {
   const [tab, setTab] = useState<"description" | "explanation" | "output">("description");
+  const [rightTab, setRightTab] = useState<"walkthrough" | "visual" | "practice">("walkthrough");
   const [code, setCode] = useState("");
   const [output, setOutput] = useState<string[]>([]);
   const [problems, setProblems] = useState<WorkspaceProblem[]>([]);
@@ -576,13 +577,36 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
 
         <section className="bg-[#1f1f1f] flex flex-col">
           <div className="flex h-16 items-center justify-between border-b border-black bg-[#0a0a0a] px-6">
-            <div className="flex items-center gap-3">
-              <span className="rounded-md bg-[#1f1f1f] px-4 py-2 font-semibold">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRightTab("walkthrough")}
+                className={`rounded-md px-4 py-2 font-semibold transition ${
+                  rightTab === "walkthrough" ? "bg-[#1f1f1f] text-white" : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                }`}
+              >
                 Concept walkthrough
-              </span>
-              <span className="text-sm font-semibold text-slate-600">
-                {copy.needsEditor ? "lesson first, code second" : "visual explanation"}
-              </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightTab("visual")}
+                className={`rounded-md px-4 py-2 font-semibold transition ${
+                  rightTab === "visual" ? "bg-[#1f1f1f] text-white" : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                }`}
+              >
+                Visual explanation
+              </button>
+              {copy.needsEditor ? (
+                <button
+                  type="button"
+                  onClick={() => setRightTab("practice")}
+                  className={`rounded-md px-4 py-2 font-semibold transition ${
+                    rightTab === "practice" ? "bg-[#1f1f1f] text-white" : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                  }`}
+                >
+                  Practice
+                </button>
+              ) : null}
             </div>
             <div className="flex items-center gap-3">
               <span className={`hidden text-sm font-semibold md:inline ${isCompleted ? "text-emerald-300" : "text-slate-500"}`}>
@@ -595,9 +619,10 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
           </div>
           
           <div className="flex flex-1 flex-col overflow-y-auto bg-[#111] p-6">
-            <VisualExplanation copy={copy} />
+            {rightTab === "visual" ? <VisualExplanation copy={copy} /> : null}
 
-            <div className="mt-6 grid gap-4">
+            {rightTab === "walkthrough" ? (
+            <div className="grid gap-4">
               {copy.animationFrames.map((frame, index) => (
                 <div
                   key={frame}
@@ -621,9 +646,10 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                 </div>
               ))}
             </div>
+            ) : null}
 
-            {copy.needsEditor ? (
-              <div className="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-[#1b1b1b]">
+            {copy.needsEditor && rightTab === "practice" ? (
+              <div className="overflow-hidden rounded-lg border border-slate-800 bg-[#1b1b1b]">
                 <div className="flex min-h-16 items-center justify-between border-b border-black bg-[#0a0a0a] px-5">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">Practice only after learning</p>
