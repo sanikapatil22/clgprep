@@ -30,7 +30,11 @@ type WorkspaceCopy = {
   title: string;
   difficulty: string;
   description: string;
+  plainMeaning: string;
   rules: string[];
+  steps: string[];
+  example: string;
+  misconception: string;
   task: string;
   codeTitle: string;
   code: string;
@@ -79,6 +83,38 @@ function getWorkspaceMode(course: CampusCourse, module: CampusCourse["modules"][
   return { needsEditor: false, language: "javascript" as const };
 }
 
+function getProgrammingLesson(topic: TopicNode, course: CampusCourse, module: CampusCourse["modules"][number]) {
+  if (includesAny(topic.title, ["class", "object"])) {
+    return {
+      plainMeaning:
+        "A class is a blueprint. An object is one real thing created from that blueprint. If Student is a class, Sanika, Rahul, and Aisha can be separate Student objects with their own data.",
+      steps: [
+        "First identify the real-world thing you want to model.",
+        "List the data that thing must remember, such as name, id, balance, marks, or speed.",
+        "List the actions that thing can perform, such as display, update, calculate, start, or stop.",
+        "Put the data and actions together inside a class.",
+        "Create objects from the class and call their actions.",
+      ],
+      example:
+        "For a college app, a Student class can store USN, name, semester, and CGPA. Each student record on the screen is one object made from that class.",
+      misconception:
+        "Do not think of a class as the actual data. The class is the plan; objects are the actual data created from that plan.",
+    };
+  }
+
+  return {
+    plainMeaning: `${topic.title} is a concept from ${course.code} that helps you understand ${module.title} by turning a broad syllabus point into a smaller idea you can explain, trace, and apply.`,
+    steps: [
+      "Read the name of the topic and define it in one sentence.",
+      "Find the input or situation where the topic appears.",
+      "Trace what changes step by step.",
+      "Connect the result to one lab problem, exam question, or project use case.",
+    ],
+    example: `In ${course.title}, ${topic.title} can be studied by taking one small case from ${module.title} and explaining what happens before and after the concept is applied.`,
+    misconception: "Do not jump straight to syntax or formulas. First know what problem the concept solves.",
+  };
+}
+
 function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][number], topic: TopicNode): WorkspaceCopy {
   const mode = getWorkspaceMode(course, module, topic);
 
@@ -90,11 +126,23 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
         topic.title === "1NF"
           ? "Convert a table with repeated or multi-valued cells into rows where every attribute value is atomic."
           : "Understand the concept through a focused college example, visual trace, and implementation-style steps.",
+      plainMeaning:
+        topic.title === "1NF"
+          ? "First Normal Form means every cell in a table stores one value. A cell like 'DBMS, OS, CN' is not atomic; it must be split into separate rows."
+          : "Database design concepts help you store facts once, retrieve them reliably, and avoid inconsistent updates.",
       rules: [
         "Every cell should hold one value, not a list",
         "Repeated groups are moved into separate rows",
         "A stable key keeps each fact identifiable",
       ],
+      steps: [
+        "Find the table that stores repeated or mixed values.",
+        "Identify the stable key for the main entity.",
+        "Move repeated values into a separate relation.",
+        "Check that each row now stores one clean fact.",
+      ],
+      example: "Student(id, name, courses) becomes Student(id, name) and Enrollment(student_id, course_code).",
+      misconception: "Normalization is not just splitting tables randomly. Every split should remove duplication or make one fact live in one place.",
       task: "Transform Student(id, name, courses) into Student and Enrollment relations.",
       codeTitle: "normalization.sql",
       code: "CREATE TABLE student (\n  id INT PRIMARY KEY,\n  name TEXT NOT NULL\n);\n\nCREATE TABLE enrollment (\n  student_id INT REFERENCES student(id),\n  course_code TEXT NOT NULL,\n  PRIMARY KEY (student_id, course_code)\n);",
@@ -106,6 +154,7 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
   }
 
   const compactName = topic.title.replace(/[^A-Za-z0-9]/g, "") || "Topic";
+  const lesson = getProgrammingLesson(topic, course, module);
   const code = mode.language === "sql"
     ? `CREATE TABLE concept_check (\n  id INTEGER PRIMARY KEY,\n  topic TEXT NOT NULL,\n  observation TEXT NOT NULL\n);\n\nINSERT INTO concept_check (topic, observation)\nVALUES ('${topic.title.replace(/'/g, "''")}', 'mapped to a working data model');\n\nSELECT * FROM concept_check;`
     : `const topic = ${JSON.stringify(topic.title)};\nconst moduleName = ${JSON.stringify(module.title)};\n\nfunction buildLearningPath(name) {\n  return [\n    \"define the concept\",\n    \"trace one worked example\",\n    \"test the idea with a small case\",\n  ].map((step, index) => ({ step: index + 1, name, action: step }));\n}\n\nconsole.log(buildLearningPath(topic));`;
@@ -114,13 +163,17 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
     title: topic.title,
     difficulty: mode.needsEditor ? "Practice" : "Visual",
     description: mode.needsEditor
-      ? `Use the editor to turn ${topic.title} from ${course.code} into a small runnable check.`
+      ? `Learn ${topic.title} first, then use a small runnable check to confirm the idea.`
       : `Learn ${topic.title} through a visual sequence before moving to practice or exam problems.`,
+    plainMeaning: lesson.plainMeaning,
     rules: mode.needsEditor
-      ? ["Name the input clearly", "Encode the concept as a tiny runnable check", "Run once and inspect the output"]
+      ? ["Understand the idea before writing code", "Use code only to test the concept", "Explain the output in words after running it"]
       : ["Start with the real use case", "Follow the idea through the animation frames", "Summarize the rule in your own words"],
+    steps: lesson.steps,
+    example: lesson.example,
+    misconception: lesson.misconception,
     task: mode.needsEditor
-      ? `Build a tiny implementation that demonstrates ${topic.title} in the context of ${module.title}.`
+      ? `After the explanation makes sense, run or edit the practice snippet to demonstrate ${topic.title}.`
       : `Trace the animation for ${topic.title}, then explain how it supports ${module.title}.`,
     codeTitle: mode.language === "sql" ? `${compactName.toLowerCase()}.sql` : `${compactName || "concept"}.js`,
     code,
@@ -128,10 +181,10 @@ function getConceptCopy(course: CampusCourse, module: CampusCourse["modules"][nu
     needsEditor: mode.needsEditor,
     language: mode.language,
     animationFrames: [
-      `Start with ${module.title}`,
-      `Focus on ${topic.title}`,
-      "Trace the core relationship",
-      "Apply it to a lab, project, or exam problem",
+      `Problem: ${module.title} feels broad`,
+      `Concept: ${topic.title} gives one smaller idea`,
+      "Break it into definition, parts, and behavior",
+      "Use one example to prove you understood it",
     ],
   };
 }
@@ -255,9 +308,26 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
             {tab === "description" ? (
               <div>
                 <h2 className="text-3xl font-semibold">{copy.title}</h2>
-                <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-400">{copy.description}</p>
-                <div className="mt-12">
-                  <h3 className="border-b border-slate-800 pb-3 text-xl font-semibold">Rules</h3>
+                <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-400">{copy.plainMeaning}</p>
+                <div className="mt-8 rounded-lg border border-emerald-900/60 bg-emerald-950/15 p-5">
+                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-300">Why this matters</p>
+                  <p className="mt-3 leading-7 text-slate-300">{copy.description}</p>
+                </div>
+                <div className="mt-10">
+                  <h3 className="border-b border-slate-800 pb-3 text-xl font-semibold">Step by Step</h3>
+                  <ol className="mt-5 space-y-4 text-slate-300">
+                    {copy.steps.map((step, index) => (
+                      <li key={step} className="flex gap-4">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sm font-bold text-sky-300">
+                          {index + 1}
+                        </span>
+                        <span className="pt-1 leading-7">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="mt-10">
+                  <h3 className="border-b border-slate-800 pb-3 text-xl font-semibold">Remember</h3>
                   <ul className="mt-4 space-y-4 text-slate-400">
                     {copy.rules.map((rule) => (
                       <li key={rule} className="flex gap-3">
@@ -267,9 +337,12 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                     ))}
                   </ul>
                 </div>
-                <div className="mt-12">
-                  <h3 className="border-b border-slate-800 pb-3 text-xl font-semibold">Concept Task</h3>
-                  <p className="mt-4 text-lg leading-8 text-slate-400">{copy.task}</p>
+                <div className="mt-10">
+                  <h3 className="border-b border-slate-800 pb-3 text-xl font-semibold">Example</h3>
+                  <p className="mt-4 text-lg leading-8 text-slate-300">{copy.example}</p>
+                  <p className="mt-5 rounded-lg border border-amber-900/50 bg-amber-950/10 p-4 leading-7 text-amber-100/80">
+                    {copy.misconception}
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -278,7 +351,7 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
               <div>
                 <h2 className="text-3xl font-semibold">Topic Explanation</h2>
                 <p className="mt-6 text-lg leading-8 text-slate-400">
-                  CampusLabs treats this as a concept workspace. Read the real-system behavior, inspect the transformation on the right, then mark the concept complete when it clicks.
+                  Read the idea like a lesson first. The right side shows the concept as a flow; the editor appears only as practice when code helps you test the idea.
                 </p>
                 <div className="mt-8 rounded-lg border border-slate-800 bg-black p-5">
                   <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-300">Real system lens</p>
@@ -434,48 +507,73 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
           <div className="flex h-16 items-center justify-between border-b border-black bg-[#0a0a0a] px-6">
             <div className="flex items-center gap-3">
               <span className="rounded-md bg-[#1f1f1f] px-4 py-2 font-semibold">
-                {copy.needsEditor ? copy.codeTitle : "topic-animation"}
+                Concept walkthrough
               </span>
               <span className="text-sm font-semibold text-slate-600">
-                {copy.needsEditor ? "concept-notes.md" : "visual-explanation"}
+                {copy.needsEditor ? "lesson first, code second" : "visual explanation"}
               </span>
             </div>
             <div className="flex items-center gap-3">
               <span className={`hidden text-sm font-semibold md:inline ${isCompleted ? "text-emerald-300" : "text-slate-500"}`}>
                 {isCompleted ? "Concept Complete" : "Workspace Ready"}
               </span>
-              {copy.needsEditor ? (
-                <>
-                  <Button variant="secondary" size="sm" onClick={handleReset} disabled={isExecuting}>
-                    <RotateCcw size={16} />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleRun}
-                    disabled={isExecuting}
-                  >
-                    {isExecuting ? (
-                      <>
-                        <Loader size={16} className="animate-spin" /> Running
-                      </>
-                    ) : (
-                      <>
-                        <Play size={16} /> Run
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : null}
               <Button size="sm" onClick={handleComplete} disabled={isCompleted}>
                 <Check size={16} /> {isCompleted ? "Completed" : "Complete"}
               </Button>
             </div>
           </div>
           
-          {copy.needsEditor ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <div className={`${output.length > 0 ? "flex-1" : "flex-1"} bg-[#1b1b1b] overflow-hidden`}>
+          <div className="flex flex-1 flex-col overflow-y-auto bg-[#111] p-6">
+            <div className="grid gap-4">
+              {copy.animationFrames.map((frame, index) => (
+                <div
+                  key={frame}
+                  className="relative overflow-hidden rounded-lg border border-slate-800 bg-black p-5"
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 w-1 bg-sky-400"
+                    style={{ animation: `pulse 2.8s ease-in-out ${index * 0.2}s infinite` }}
+                  />
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Frame {index + 1}</p>
+                  <h3 className="mt-3 text-2xl font-semibold text-white">{frame}</h3>
+                  <p className="mt-3 leading-7 text-slate-400">
+                    {index === 0
+                      ? copy.plainMeaning
+                      : index === 1
+                        ? copy.example
+                        : index === 2
+                          ? copy.steps[index - 1] ?? copy.task
+                          : copy.task}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {copy.needsEditor ? (
+              <div className="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-[#1b1b1b]">
+                <div className="flex min-h-16 items-center justify-between border-b border-black bg-[#0a0a0a] px-5">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">Practice only after learning</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-400">{copy.codeTitle}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button variant="secondary" size="sm" onClick={handleReset} disabled={isExecuting}>
+                      <RotateCcw size={16} />
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleRun} disabled={isExecuting}>
+                      {isExecuting ? (
+                        <>
+                          <Loader size={16} className="animate-spin" /> Running
+                        </>
+                      ) : (
+                        <>
+                          <Play size={16} /> Run
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div className="h-[320px]">
               <Editor
                 height="100%"
                 defaultLanguage={language}
@@ -491,7 +589,7 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                   wordWrap: "on",
                 }}
               />
-            </div>
+                </div>
 
             {output.length > 0 && (
               <div className="border-t border-black bg-[#0a0a0a] overflow-y-auto" style={{maxHeight: "300px"}}>
@@ -605,29 +703,9 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                 </div>
               </div>
             )}
-          </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center overflow-hidden bg-[#111] p-8">
-              <div className="grid w-full max-w-4xl gap-5">
-                {copy.animationFrames.map((frame, index) => (
-                  <div
-                    key={frame}
-                    className="relative overflow-hidden rounded-lg border border-slate-800 bg-black p-6"
-                  >
-                    <div
-                      className="absolute inset-y-0 left-0 w-1 bg-sky-400"
-                      style={{ animation: `pulse 2.8s ease-in-out ${index * 0.2}s infinite` }}
-                    />
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Frame {index + 1}</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-white">{frame}</h3>
-                    <p className="mt-3 leading-7 text-slate-400">
-                      Connect this step back to {course.code} and write one concrete example before marking the topic complete.
-                    </p>
-                  </div>
-                ))}
               </div>
-            </div>
-          )}
+            ) : null}
+          </div>
         </section>
       </main>
     </div>
