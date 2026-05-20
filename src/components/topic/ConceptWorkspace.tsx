@@ -19,6 +19,13 @@ type ConceptWorkspaceProps = {
   topic: TopicNode;
 };
 
+type WorkspaceProblem = { line: number; type: string; message: string };
+type WorkspaceTable = {
+  name: string;
+  columns: Array<{ name: string; type: string; primaryKey?: boolean; notNull?: boolean }>;
+  rows?: Record<string, unknown>[];
+};
+
 function getConceptCopy(courseSlug: string, topic: TopicNode) {
   if (courseSlug === "dbms") {
     return {
@@ -56,12 +63,13 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
   const [tab, setTab] = useState<"description" | "explanation" | "output">("description");
   const [code, setCode] = useState("");
   const [output, setOutput] = useState<string[]>([]);
-  const [problems, setProblems] = useState<Array<{line: number, type: string, message: string}>>([]);
-  const [tables, setTables] = useState<Array<{name: string, columns: Array<{name: string, type: string}>}>>([]);
+  const [problems, setProblems] = useState<WorkspaceProblem[]>([]);
+  const [tables, setTables] = useState<WorkspaceTable[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [outputTab, setOutputTab] = useState<"problems" | "tables">("problems");
+  const [outputTab, setOutputTab] = useState<"run" | "problems" | "tables">("run");
   const copy = getConceptCopy(course.slug, topic);
+  const language = course.slug === "dbms" ? "sql" : "javascript";
 
   // Initialize code on mount
   const [codeInitialized, setCodeInitialized] = useState(false);
@@ -74,74 +82,37 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
     if (!code.trim()) {
       setOutput(["Error: No code to execute"]);
       setTab("output");
-      setOutputTab("problems");
+      setOutputTab("run");
       return;
     }
 
     setIsExecuting(true);
     setTab("output");
-    setOutputTab("problems");
+    setOutputTab("run");
 
     try {
       const response = await fetch("/api/code-execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, language: "sql" }),
+        body: JSON.stringify({ code, language }),
       });
 
       const result = await response.json();
+      const errorMessage = result.error || (!response.ok ? "Execution failed" : "");
 
-      // Extract problems from results
-      const newProblems: Array<{line: number, type: string, message: string}> = [];
-      if (result.results) {
-        result.results.forEach((r: any, idx: number) => {
-          if (!r.success) {
-            newProblems.push({
-              line: idx + 1,
-              type: "Error",
-              message: r.error || "Unknown error"
-            });
-          }
-        });
-      }
-      setProblems(newProblems);
-
-      // Extract tables from results
-      const newTables: Array<{name: string, columns: Array<{name: string, type: string}>}> = [];
-      if (result.results) {
-        result.results.forEach((r: any) => {
-          if (r.success && r.type === "CREATE TABLE") {
-            // Parse table name from details
-            const match = r.details?.match(/Table "([^"]+)"/);
-            const tableName = match ? match[1] : "Unknown";
-            
-            // Extract columns from API response
-            let columnList: Array<{name: string, type: string}> = [];
-            if (r.columns && Array.isArray(r.columns)) {
-              columnList = r.columns.map((col: string) => {
-                const parts = col.trim().split(/\s+/);
-                const name = parts[0];
-                const type = parts.slice(1).join(" ") || "TEXT";
-                return { name, type };
-              });
-            }
-            
-            if (tableName && columnList.length > 0) {
-              newTables.push({
-                name: tableName,
-                columns: columnList
-              });
-            }
-          }
-        });
-      }
-      setTables(newTables);
-
-      if (result.output) {
-        setOutput(result.output);
-      } else {
-        setOutput(["Execution completed"]);
-      }
+      setProblems(
+        result.success
+          ? []
+          : [{ line: 0, type: result.errorType || "Error", message: errorMessage }]
+      );
+      setTables(Array.isArray(result.tables) ? result.tables : []);
+      setOutput(
+        result.success
+          ? result.output?.length
+            ? result.output
+            : ["Execution completed successfully."]
+          : [`${result.errorType || "Error"}: ${errorMessage}`]
+      );
     } catch (error) {
       setOutput([`Error: ${error instanceof Error ? error.message : "Execution failed"}`]);
       setProblems([{ line: 0, type: "Error", message: error instanceof Error ? error.message : "Execution failed" }]);
@@ -199,7 +170,7 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
         </div>
       </header>
 
-      <main className="grid min-h-[calc(100vh-88px)] lg:grid-cols-[43%_57%]">
+      <main className="grid min-h-[calc(100vh-88px)] grid-cols-1 lg:grid-cols-[43%_57%]">
         <section className="border-r border-slate-900 bg-[#070707]">
           <div className="mx-auto max-w-3xl px-8 py-12">
             {tab === "description" ? (
@@ -241,6 +212,16 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
               <div>
                 <div className="mb-4 flex gap-2 border-b border-slate-800">
                   <button
+                    onClick={() => setOutputTab("run")}
+                    className={`pb-3 px-2 font-semibold text-sm transition ${
+                      outputTab === "run"
+                        ? "border-b-2 border-emerald-400 text-emerald-400"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    Run Output
+                  </button>
+                  <button
                     onClick={() => setOutputTab("problems")}
                     className={`pb-3 px-2 font-semibold text-sm transition ${
                       outputTab === "problems"
@@ -261,6 +242,16 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                     Tables {tables.length > 0 && <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-xs">{tables.length}</span>}
                   </button>
                 </div>
+
+                {outputTab === "run" ? (
+                  <div className="rounded-md border border-slate-800 bg-black p-4">
+                    {output.length === 0 ? (
+                      <p className="text-slate-500">Click "Run" to execute your code.</p>
+                    ) : (
+                      <pre className="whitespace-pre-wrap font-mono text-sm leading-6 text-slate-200">{output.join("\n")}</pre>
+                    )}
+                  </div>
+                ) : null}
 
                 {outputTab === "problems" ? (
                   <div className="space-y-2">
@@ -300,9 +291,37 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
                                 <span className="font-mono text-emerald-400">{col.name}</span>
                                 <span className="text-slate-500">·</span>
                                 <span className="font-mono text-slate-400">{col.type}</span>
+                                {col.primaryKey ? <span className="rounded bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-200">PK</span> : null}
+                                {col.notNull ? <span className="rounded bg-sky-400/10 px-2 py-0.5 text-xs text-sky-200">NOT NULL</span> : null}
                               </div>
                             ))}
                           </div>
+                          {table.rows?.length ? (
+                            <div className="mt-4 overflow-x-auto">
+                              <table className="w-full border-collapse text-left text-sm">
+                                <thead className="text-slate-400">
+                                  <tr>
+                                    {table.columns.map((column) => (
+                                      <th key={column.name} className="border-b border-emerald-900 px-2 py-2 font-mono">
+                                        {column.name}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {table.rows.map((row, rowIndex) => (
+                                    <tr key={rowIndex} className="text-slate-300">
+                                      {table.columns.map((column) => (
+                                        <td key={column.name} className="border-b border-emerald-950 px-2 py-2 font-mono">
+                                          {String(row[column.name] ?? "NULL")}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : null}
                         </div>
                       ))
                     )}
@@ -313,7 +332,7 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
           </div>
         </section>
 
-        <section className="bg-[#1f1f1f]">
+        <section className="bg-[#1f1f1f] flex flex-col">
           <div className="flex h-16 items-center justify-between border-b border-black bg-[#0a0a0a] px-6">
             <div className="flex items-center gap-3">
               <span className="rounded-md bg-[#1f1f1f] px-4 py-2 font-semibold">{copy.codeTitle}</span>
@@ -347,22 +366,138 @@ export function ConceptWorkspace({ course, module, topic }: ConceptWorkspaceProp
               </Button>
             </div>
           </div>
-          <div className="overflow-hidden bg-[#1b1b1b]" style={{ height: "calc(100vh - 152px)" }}>
-            <Editor
-              height="100%"
-              defaultLanguage="sql"
-              value={code}
-              onChange={(value) => setCode(value || "")}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                fontFamily: "'Monaco', 'Courier New', monospace",
-                lineNumbers: "on",
-                scrollBeyondLastLine: false,
-                wordWrap: "on",
-              }}
-            />
+          
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div className={`${output.length > 0 ? "flex-1" : "flex-1"} bg-[#1b1b1b] overflow-hidden`}>
+              <Editor
+                height="100%"
+                defaultLanguage={language}
+                value={code}
+                onChange={(value) => setCode(value || "")}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  fontFamily: "'Monaco', 'Courier New', monospace",
+                  lineNumbers: "on",
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                }}
+              />
+            </div>
+
+            {output.length > 0 && (
+              <div className="border-t border-black bg-[#0a0a0a] overflow-y-auto" style={{maxHeight: "300px"}}>
+                <div className="px-4 py-3 border-b border-slate-800">
+                  <h3 className="font-semibold text-sm text-slate-300">Execution Output</h3>
+                </div>
+                <div className="p-4 space-y-2">
+                  <div className="mb-4 flex gap-2 border-b border-slate-800 pb-3">
+                    <button
+                      onClick={() => setOutputTab("run")}
+                      className={`pb-2 px-2 font-semibold text-sm transition ${
+                        outputTab === "run"
+                          ? "border-b-2 border-emerald-400 text-emerald-400"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      Run Output
+                    </button>
+                    <button
+                      onClick={() => setOutputTab("problems")}
+                      className={`pb-2 px-2 font-semibold text-sm transition ${
+                        outputTab === "problems"
+                          ? "border-b-2 border-emerald-400 text-emerald-400"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      Problems {problems.length > 0 && <span className="ml-1 rounded-full bg-red-600 px-1.5 py-0 text-xs">{problems.length}</span>}
+                    </button>
+                    <button
+                      onClick={() => setOutputTab("tables")}
+                      className={`pb-2 px-2 font-semibold text-sm transition ${
+                        outputTab === "tables"
+                          ? "border-b-2 border-emerald-400 text-emerald-400"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      Tables {tables.length > 0 && <span className="ml-1 rounded-full bg-emerald-600 px-1.5 py-0 text-xs">{tables.length}</span>}
+                    </button>
+                  </div>
+
+                  {outputTab === "run" && (
+                    <pre className="whitespace-pre-wrap rounded-md border border-slate-800 bg-black p-3 font-mono text-xs leading-5 text-slate-200">
+                      {output.join("\n")}
+                    </pre>
+                  )}
+
+                  {outputTab === "problems" && (
+                    <div className="space-y-2">
+                      {problems.length === 0 ? (
+                        <div className="text-xs text-emerald-400">✓ No errors</div>
+                      ) : (
+                        problems.map((problem, idx) => (
+                          <div key={idx} className="rounded-md border border-red-800 bg-red-950 p-2 text-red-300 text-xs">
+                            <p className="font-semibold">{problem.type}</p>
+                            <p className="mt-1 text-red-200">{problem.message}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {outputTab === "tables" && (
+                    <div className="space-y-3">
+                      {tables.length === 0 ? (
+                        <div className="text-xs text-slate-500">No tables created</div>
+                      ) : (
+                        tables.map((table, idx) => (
+                          <div key={idx} className="rounded-md border border-emerald-800 bg-emerald-950/30 p-2 text-emerald-300 text-xs">
+                            <h4 className="font-bold mb-2">{table.name}</h4>
+                            <div className="space-y-1">
+                              {table.columns.map((col, colIdx) => (
+                                <div key={colIdx} className="flex items-center gap-2">
+                                  <span className="font-mono text-emerald-400">{col.name}</span>
+                                  <span className="text-slate-600">·</span>
+                                    <span className="font-mono text-slate-400">{col.type}</span>
+                                    {col.primaryKey ? <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-[10px] text-emerald-200">PK</span> : null}
+                                  </div>
+                                ))}
+                              </div>
+                              {table.rows?.length ? (
+                                <div className="mt-3 overflow-x-auto">
+                                  <table className="w-full text-left">
+                                    <thead className="text-slate-500">
+                                      <tr>
+                                        {table.columns.map((column) => (
+                                          <th key={column.name} className="border-b border-slate-800 py-1 pr-3 font-mono">
+                                            {column.name}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {table.rows.map((row, rowIndex) => (
+                                        <tr key={rowIndex}>
+                                          {table.columns.map((column) => (
+                                            <td key={column.name} className="border-b border-slate-900 py-1 pr-3 font-mono text-slate-300">
+                                              {String(row[column.name] ?? "NULL")}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </main>

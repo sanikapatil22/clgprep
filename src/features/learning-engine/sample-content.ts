@@ -362,3 +362,15 @@ export function getDepartment(slug: string) {
 export function getCoursesForDepartment(slug: string) {
   return courses.filter((course) => course.departmentSlugs.includes(slug));
 }
+
+export function getSemesters() {
+  return Array.from(new Set(courses.map((course) => course.semester))).sort((a, b) => a - b);
+}
+
+export function getCoursesForSemester(semester: number) {
+  return courses.filter((course) => course.semester === semester);
+}
+
+export function getCoursesForSemesterAndDepartment(semester: number, departmentSlug: string) {
+  return courses.filter((course) => course.semester === semester && course.departmentSlugs.includes(departmentSlug));
+}

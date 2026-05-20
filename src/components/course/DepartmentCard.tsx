@@ -3,7 +3,15 @@ import { ArrowRight, Building2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CampusDepartment } from "@/features/learning-engine/sample-content";
 
-export function DepartmentCard({ department, courseCount }: { department: CampusDepartment; courseCount: number }) {
+export function DepartmentCard({
+  department,
+  courseCount,
+  href = `/departments/${department.slug}`,
+}: {
+  department: CampusDepartment;
+  courseCount: number;
+  href?: string;
+}) {
   return (
     <Card className="group overflow-hidden transition hover:border-emerald-300/40">
       <CardHeader>
@@ -21,7 +29,7 @@ export function DepartmentCard({ department, courseCount }: { department: Campus
           <span className="rounded-md bg-slate-900 px-3 py-2 text-slate-300">{courseCount} CampusLabs courses</span>
         </div>
         <Link
-          href={`/departments/${department.slug}`}
+          href={href}
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 hover:text-emerald-200"
         >
           View courses <ArrowRight size={16} />

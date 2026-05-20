@@ -9,9 +9,10 @@ type CourseCardProps = {
   semester: number;
   progress: number;
   xp: number;
+  href?: string;
 };
 
-export function CourseCard({ slug, title, code, semester, progress, xp }: CourseCardProps) {
+export function CourseCard({ slug, title, code, semester, progress, xp, href = `/courses/${slug}` }: CourseCardProps) {
   return (
     <Card className="overflow-hidden">
       <CardHeader>
@@ -32,7 +33,7 @@ export function CourseCard({ slug, title, code, semester, progress, xp }: Course
           <span>{xp} XP</span>
         </div>
         <Link
-          href={`/courses/${slug}`}
+          href={href}
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 hover:text-emerald-200"
         >
           Continue path <ArrowRight size={16} />

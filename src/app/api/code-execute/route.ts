@@ -1,41 +1,33 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
+import type { Database } from "sql.js";
+
+export const runtime = "nodejs";
+
+const require = createRequire(import.meta.url);
+const initSqlJs = require("sql.js") as (config?: { wasmBinary?: Buffer }) => Promise<{
+  Database: new () => Database;
+}>;
 
 type ExecuteRequest = {
   code: string;
   language?: "sql" | "javascript";
 };
 
-// Helper function to parse table columns, handling nested parentheses
-function parseTableColumns(str: string): string[] {
-  const columns: string[] = [];
-  let current = "";
-  let parenDepth = 0;
+type SqlColumn = {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  notNull: boolean;
+};
 
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i];
-
-    if (char === "(") {
-      parenDepth++;
-      current += char;
-    } else if (char === ")") {
-      parenDepth--;
-      current += char;
-    } else if (char === "," && parenDepth === 0) {
-      if (current.trim()) {
-        columns.push(current.trim());
-      }
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-
-  if (current.trim()) {
-    columns.push(current.trim());
-  }
-
-  return columns;
-}
+type SqlTable = {
+  name: string;
+  columns: SqlColumn[];
+  rows: Record<string, unknown>[];
+};
 
 export type { ExecuteRequest };
 
@@ -45,256 +37,133 @@ export async function POST(request: NextRequest) {
     const { code, language = "sql" } = body;
 
     if (!code || !code.trim()) {
-      return NextResponse.json({ error: "No code provided" }, { status: 400 });
+      return NextResponse.json({ language, success: false, error: "No code provided" }, { status: 400 });
     }
 
     if (language === "sql") {
-      return validateAndAnalyzeSql(code);
-    } else if (language === "javascript") {
-      return executeJavaScript(code);
-    } else {
-      return NextResponse.json({ error: "Unsupported language" }, { status: 400 });
+      return executeSql(code);
     }
+
+    if (language === "javascript") {
+      return executeJavaScript(code);
+    }
+
+    return NextResponse.json({ success: false, error: "Unsupported language" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
-function validateAndAnalyzeSql(code: string) {
+async function executeSql(code: string) {
   try {
-    const statements = code
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const wasmBinary = readFileSync(join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"));
+    const SQL = await initSqlJs({ wasmBinary });
+    const db = new SQL.Database();
+    const resultSets = db.exec(code);
+    const tables = readTables(db);
 
-    if (statements.length === 0) {
-      return NextResponse.json({ error: "No SQL statements found" }, { status: 400 });
-    }
-
-    const results = [];
     const output: string[] = [];
-    let hasErrors = false;
-
-    for (const statement of statements) {
-      const validation = validateSqlStatement(statement);
-
-      if (validation.valid) {
-        output.push(`✓ ${validation.type}`);
-        if (validation.details) {
-          output.push(`  ${validation.details}`);
-        }
-        results.push({
-          success: true,
-          statement: statement.substring(0, 60),
-          type: validation.type,
-          details: validation.details,
-        });
-      } else {
-        output.push(`✗ Syntax Error`);
-        output.push(`  Line: ${validation.error}`);
-        output.push(`  Statement: ${statement.substring(0, 60)}...`);
-        hasErrors = true;
-        results.push({
-          success: false,
-          statement: statement.substring(0, 60),
-          error: validation.error,
-        });
-      }
+    if (resultSets.length === 0) {
+      output.push("SQL executed successfully.");
     }
+
+    resultSets.forEach((set, index) => {
+      output.push(`Result ${index + 1}: ${set.values.length} row${set.values.length === 1 ? "" : "s"}`);
+      output.push(set.columns.join(" | "));
+      set.values.forEach((row) => output.push(row.map((value) => String(value ?? "NULL")).join(" | ")));
+    });
+
+    db.close();
 
     return NextResponse.json({
       language: "sql",
-      success: !hasErrors,
-      results: results,
-      output: output,
-      hasErrors: hasErrors,
+      success: true,
+      output,
+      resultSets: resultSets.map((set) => ({
+        columns: set.columns,
+        rows: set.values.map((row) =>
+          Object.fromEntries(set.columns.map((column, index) => [column, row[index] ?? null]))
+        ),
+      })),
+      tables,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "SQL analysis failed" },
-      { status: 500 }
+      {
+        language: "sql",
+        success: false,
+        errorType: error instanceof SyntaxError ? "Syntax Error" : "SQL Error",
+        error: error instanceof Error ? error.message : "SQL execution failed",
+        output: [],
+        tables: [],
+      },
+      { status: 400 }
     );
   }
 }
 
-function validateSqlStatement(statement: string) {
-  const trimmed = statement.trim().toUpperCase();
+function readTables(db: Database): SqlTable[] {
+  const tableResults = db.exec(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+  );
+  const names = tableResults[0]?.values.map((row) => String(row[0])) ?? [];
 
-  // Check for empty statement
-  if (!trimmed) {
-    return { valid: false, error: "Empty statement" };
-  }
+  return names.map((name) => {
+    const escapedName = name.replace(/'/g, "''");
+    const columnResult = db.exec(`PRAGMA table_info('${escapedName}')`);
+    const columns =
+      columnResult[0]?.values.map((row) => ({
+        name: String(row[1]),
+        type: String(row[2] || "ANY"),
+        notNull: Boolean(row[3]),
+        primaryKey: Boolean(row[5]),
+      })) ?? [];
 
-  // Validate CREATE TABLE
-  if (trimmed.startsWith("CREATE TABLE")) {
-    const match = statement.match(/CREATE\s+TABLE\s+(\w+)\s*\((.*)\)/is);
-    if (!match) {
-      return { valid: false, error: "Invalid CREATE TABLE syntax. Expected: CREATE TABLE table_name (...)" };
-    }
+    const selectResult = db.exec(`SELECT * FROM "${name.replace(/"/g, '""')}" LIMIT 25`);
+    const rows =
+      selectResult[0]?.values.map((row) =>
+        Object.fromEntries(selectResult[0].columns.map((column, index) => [column, row[index] ?? null]))
+      ) ?? [];
 
-    const tableName = match[1];
-    const columnsStr = match[2];
-
-    // Parse columns handling nested parentheses
-    const columns = parseTableColumns(columnsStr);
-    if (columns.length === 0) {
-      return { valid: false, error: "CREATE TABLE requires at least one column" };
-    }
-
-    // Extract actual columns (not constraints)
-    const columnDefs = columns
-      .filter((c) => {
-        const colUpper = c.toUpperCase();
-        return !(
-          colUpper.includes("PRIMARY KEY") ||
-          colUpper.includes("FOREIGN KEY") ||
-          colUpper.includes("UNIQUE") ||
-          colUpper.includes("CHECK")
-        );
-      })
-      .map((c) => {
-        const trimmed = c.trim();
-        const parts = trimmed.split(/\s+/);
-        if (parts.length >= 2) {
-          // Return "columnName TYPE"
-          return `${parts[0]} ${parts.slice(1).join(" ")}`;
-        }
-        return parts[0];
-      })
-      .filter((c) => c);
-
-    return {
-      valid: true,
-      type: "CREATE TABLE",
-      details: `Table "${tableName}" with columns: ${columnDefs.join(", ")}`,
-      columns: columnDefs,
-    };
-  }
-
-  // Validate INSERT
-  if (trimmed.startsWith("INSERT")) {
-    const match = statement.match(/INSERT\s+INTO\s+(\w+)\s*(?:\((.*?)\))?\s*VALUES\s*\((.*?)\)/is);
-    if (!match) {
-      return {
-        valid: false,
-        error: "Invalid INSERT syntax. Expected: INSERT INTO table_name (columns) VALUES (...)",
-      };
-    }
-
-    const tableName = match[1];
-    const columns = match[2] ? match[2].split(",").length : 0;
-    const values = match[3] ? match[3].split(",").length : 0;
-
-    if (columns > 0 && columns !== values) {
-      return {
-        valid: false,
-        error: `Column count (${columns}) does not match value count (${values})`,
-      };
-    }
-
-    return { valid: true, type: "INSERT", details: `Inserting into table "${tableName}"` };
-  }
-
-  // Validate SELECT
-  if (trimmed.startsWith("SELECT")) {
-    const match = statement.match(/SELECT\s+(.*?)\s+FROM\s+(\w+)/is);
-    if (!match) {
-      return { valid: false, error: "Invalid SELECT syntax. Expected: SELECT columns FROM table_name" };
-    }
-
-    const columns = match[1].trim();
-    const tableName = match[2];
-
-    if (!columns || columns === "*") {
-      return { valid: true, type: "SELECT", details: `Query from table "${tableName}": all columns` };
-    }
-
-    const colList = columns.split(",").map((c) => c.trim());
-    return {
-      valid: true,
-      type: "SELECT",
-      details: `Query from table "${tableName}": ${colList.join(", ")}`,
-    };
-  }
-
-  // Validate UPDATE
-  if (trimmed.startsWith("UPDATE")) {
-    const match = statement.match(/UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE/is);
-    if (!match) {
-      return {
-        valid: false,
-        error: "Invalid UPDATE syntax. Expected: UPDATE table_name SET column=value WHERE condition",
-      };
-    }
-
-    const tableName = match[1];
-    return { valid: true, type: "UPDATE", details: `Updating table "${tableName}"` };
-  }
-
-  // Validate DELETE
-  if (trimmed.startsWith("DELETE")) {
-    const match = statement.match(/DELETE\s+FROM\s+(\w+)/is);
-    if (!match) {
-      return { valid: false, error: "Invalid DELETE syntax. Expected: DELETE FROM table_name WHERE condition" };
-    }
-
-    const tableName = match[1];
-    return { valid: true, type: "DELETE", details: `Deleting from table "${tableName}"` };
-  }
-
-  // Validate ALTER TABLE
-  if (trimmed.startsWith("ALTER TABLE")) {
-    const match = statement.match(/ALTER\s+TABLE\s+(\w+)\s+(ADD|DROP|MODIFY)/is);
-    if (!match) {
-      return {
-        valid: false,
-        error: "Invalid ALTER TABLE syntax. Expected: ALTER TABLE table_name ADD/DROP/MODIFY ...",
-      };
-    }
-
-    const tableName = match[1];
-    const action = match[2].toUpperCase();
-    return { valid: true, type: "ALTER TABLE", details: `${action} on table "${tableName}"` };
-  }
-
-  // Unknown statement
-  const firstWord = trimmed.split(/\s+/)[0];
-  return {
-    valid: false,
-    error: `Unknown or unsupported SQL statement: "${firstWord}"`,
-  };
+    return { name, columns, rows };
+  });
 }
 
 function executeJavaScript(code: string) {
   try {
     const output: string[] = [];
-
     const mockConsole = {
-      log: (...args: any[]) => {
-        output.push(args.map((a) => JSON.stringify(a)).join(" "));
-      },
-      error: (...args: any[]) => {
-        output.push("ERROR: " + args.map((a) => JSON.stringify(a)).join(" "));
-      },
+      log: (...args: unknown[]) => output.push(args.map(formatConsoleValue).join(" ")),
+      error: (...args: unknown[]) => output.push(`ERROR: ${args.map(formatConsoleValue).join(" ")}`),
+      warn: (...args: unknown[]) => output.push(`WARN: ${args.map(formatConsoleValue).join(" ")}`),
     };
 
     const fn = new Function("console", code);
-    fn(mockConsole);
+    const result = fn(mockConsole);
+    if (result !== undefined) output.push(`Return value: ${formatConsoleValue(result)}`);
 
     return NextResponse.json({
       language: "javascript",
       success: true,
-      output: output,
+      output: output.length ? output : ["JavaScript executed successfully."],
     });
   } catch (error) {
     return NextResponse.json(
       {
         language: "javascript",
         success: false,
+        errorType: error instanceof SyntaxError ? "Syntax Error" : "Runtime Error",
         error: error instanceof Error ? error.message : "Execution failed",
+        output: [],
       },
       { status: 400 }
     );
   }
+}
+
+function formatConsoleValue(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return `${value.name}: ${value.message}`;
+  return JSON.stringify(value);
 }
