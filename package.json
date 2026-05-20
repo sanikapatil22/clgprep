@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "6.8.2",
     "@tailwindcss/postcss": "^4.1.7",
     "@types/bcryptjs": "^2.4.6",
@@ -30,6 +31,7 @@
     "next": "^15.3.2",
     "next-auth": "^4.24.11",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.21.0",
     "playwright": "^1.52.0",
     "postcss": "^8.5.3",
     "prisma": "6.8.2",
@@ -41,5 +43,8 @@
     "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3",
     "zod": "^3.25.20"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
   }
 }
